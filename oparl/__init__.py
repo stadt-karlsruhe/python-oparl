@@ -457,7 +457,7 @@ class Object(collections.Mapping):
         if cls != self.__class__:
             raise ValueError(('Type from JSON data ({type}) does not match '
                              + 'instance type.').format(type=type))
-        for key, value in data.iteritems():
+        for key, value in six.iteritems(data):
             self._data[key] = self._convert_value(key, value)
         self.loaded = True
 
