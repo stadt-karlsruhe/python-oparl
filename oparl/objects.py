@@ -148,9 +148,7 @@ class Person(Object):
         'body': 'https://schema.oparl.org/1.0/Body',
         'location': 'https://schema.oparl.org/1.0/Location',
     }
-    _REFERENCE_LIST_FIELDS = {
-        'membership': 'https://schema.oparl.org/1.0/Membership',
-    }
+    _OBJECT_LIST_FIELDS = ['membership']
 
 
 class System(Object):
