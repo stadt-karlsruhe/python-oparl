@@ -7,6 +7,21 @@ about parliaments and their work.
 [oparl]: https://oparl.org
 
 
+Installation
+------------
+We recommend to install the library in a [virtualenv][virtualenv]:
+
+    virtualenv venv
+    source venv/bin/activate
+
+Then:
+
+    pip install -e git+https://github.com/stadt-karlsruhe/python-oparl#egg=oparl
+
+
+[virtualenv]: https://virtualenv.pypa.io/en/stable/
+
+
 Usage
 -----
 The main tool of the library is the `Object` class and its subclasses. They
