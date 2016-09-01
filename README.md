@@ -50,7 +50,7 @@ been seen "in the wild" is supported. These cases trigger a
 By default, HTTPS certificates are verified. You can disable that verification
 by setting `VERIFY_HTTPS` to `False`.
 
-The libraries logger (`log`) doesn't have a handler attached to it by default,
+The library's logger (`log`) doesn't have a handler attached to it by default,
 but may come in handy during development.
 
 
