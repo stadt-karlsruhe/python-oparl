@@ -81,7 +81,7 @@ def from_json(data):
     if not 'type' in data:
         raise ValueError('JSON data does not have a `type` field.')
     cls = _class_from_type_uri(data['type'])
-    obj = cls(data['id'])
+    obj = cls(data['id'], data['type'])
     obj._init_from_json(data)
     return obj
 
@@ -96,17 +96,15 @@ def from_id(id):
     return from_json(_get_json(id))
 
 
-def lazy(id, type):
+def _lazy(id, type):
     '''
     Create a lazy OParl object.
 
     The returned object doesn't contain any data (aside from the ID and
-    the type). Call its ``load`` method to download the actual data.
+    the type). The data is downloaded once it is required
     '''
     cls = _class_from_type_uri(type)
-    obj = cls(id)
-    obj['type'] = type
-    return obj
+    return cls(id, type)
 
 
 def _ensure_list(value, type, field):
@@ -224,9 +222,23 @@ class ExternalObjectList(collections.Sequence):
                          url=self.url))
 
 
-class Object(dict):
+class Object(collections.Mapping):
     '''
     Base class for all OParl objects.
+
+    The subclasses of this class (e.g. ``Person``) represent the various
+    OParl objects. The classes are dict-like read-only wrappers around
+    the objects' JSON data.
+
+    An object can be initialized using the ``from_id`` and ``from_json``
+    functions. The classes' constructors are not intended for public use.
+
+    Non-trivial fields defined by the OParl standard (e.g. fields of
+    type ``date-time``) are automatically converted to an appropriate
+    Python object. Nested objects referenced via an URL are loaded
+    lazily, i.e. their full data is only downloaded once it is required.
+    You can check whether that has happened using the ``loaded``
+    attribute and force it via the ``load`` method.
     '''
     # Fields that have type 'Date'. Their values are automatically
     # parsed from the string representation.
@@ -261,25 +273,41 @@ class Object(dict):
     # instances.
     _EXTERNAL_LIST_FIELDS = []
 
-    def __init__(self, id):
+    def __init__(self, id, type):
         '''
         Private constructor.
 
         Use ``from_id`` or ``from_json`` instead.
         '''
-        self['id'] = id
+        self._data = {'id': id, 'type': type}
         self.loaded = False
 
     def load(self, force=False):
         '''
-        Download the object's data.
+        Load the object's data if it hasn't been loaded, yet.
 
-        Downloads the object's data unless that has already been done.
-        Set ``force`` to ``True`` to always download the data.
+        If ``force`` is true then the data is always downloaded.
         '''
         if self.loaded and not force:
             return
-        self._init_from_json(_get_json(self['id']))
+        self._init_from_json(_get_json(self._data['id']))
+
+    def __getitem__(self, key):
+        try:
+            return self._data[key]
+        except KeyError:
+            if not self.loaded:
+                self.load()
+                return self._data[key]
+            raise
+
+    def __iter__(self):
+        self.load()
+        return self._data.__iter__()
+
+    def __len__(self):
+        self.load()
+        return len(self._data)
 
     def _convert_value(self, field, value):
         '''
@@ -290,7 +318,7 @@ class Object(dict):
         converted accordingly. Otherwise the value is returned
         unchanged.
         '''
-        type = self['type']
+        type = self._data['type']
         if field in self._DATE_FIELDS:
             return dateutil.parser.parse(value).date()
         if field in self._DATETIME_FIELDS:
@@ -324,7 +352,7 @@ class Object(dict):
                      SpecificationWarning)
                 return from_json(value)
             else:
-                return lazy(value, self._REFERENCE_FIELDS[field])
+                return _lazy(value, self._REFERENCE_FIELDS[field])
         if field in self._REFERENCE_LIST_FIELDS:
             obj_type = self._REFERENCE_LIST_FIELDS[field]
             values = []
@@ -336,7 +364,7 @@ class Object(dict):
                          SpecificationWarning)
                     values.append(from_json(v))
                 else:
-                    values.append(lazy(v, obj_type))
+                    values.append(_lazy(v, obj_type))
             return values
         if field in self._EXTERNAL_LIST_FIELDS:
             return ExternalObjectList(value)
@@ -348,9 +376,9 @@ class Object(dict):
         '''
         if not 'id' in data:
             raise ValueError('JSON data does not have an `id` field.')
-        if data['id'] != self['id']:
+        if data['id'] != self._data['id']:
             warn(('Initializing object "{id}" from JSON data which contains a '
-                 + 'different ID ("{json_id}").').format(id=self['id'],
+                 + 'different ID ("{json_id}").').format(id=self._data['id'],
                  json_id=data['id']), OParlWarning)
         try:
             type =  data['type']
@@ -360,17 +388,16 @@ class Object(dict):
         if cls != self.__class__:
             raise ValueError(('Type from JSON data ({type}) does not match '
                              + 'instance type.').format(type=type))
-        self['type'] = type
         for key, value in data.iteritems():
-            self[key] = self._convert_value(key, value)
+            self._data[key] = self._convert_value(key, value)
         self.loaded = True
 
     def __repr__(self):
         s = '<oparl:{cls}'.format(cls=self.__class__.__name__)
         if not self.loaded:
             s += '?'
-        s += ' {id}'.format(id=self['id'])
-        name = self.get('shortname', self.get('name'))
+        s += ' {id}'.format(id=self._data['id'])
+        name = self._data.get('shortname', self._data.get('name'))
         if name:
             s += ' ({name})'.format(name=name)
         s += '>'
