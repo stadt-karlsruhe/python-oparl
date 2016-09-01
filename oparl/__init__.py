@@ -80,6 +80,9 @@ from unidecode import unidecode
 log = logging.getLogger(__name__)
 
 
+__version__ = '0.1.0'
+
+
 # Official OParl 1.0 schema URI
 SCHEMA_URI = 'https://schema.oparl.org/1.0'
 
