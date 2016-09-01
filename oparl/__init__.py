@@ -34,6 +34,12 @@ This library tries to be as compatible with OParl 1.0 as possible but
 does not enforce strict compliance. In some cases non-compliant server
 behavior that has been seen "in the wild" is supported. These cases
 trigger a ``SpecificationWarning``.
+
+By default, HTTPS certificates are verified. You can disable that
+verification by setting ``VERIFY_HTTPS`` to ``False``.
+
+The libraries logger (``log``) doesn't have a handler attached to it by
+default, but may come in handy during development.
 '''
 
 from __future__ import (absolute_import, division, print_function,
@@ -54,7 +60,11 @@ from unidecode import unidecode
 log = logging.getLogger(__name__)
 
 
+# Official OParl 1.0 schema URI
 SCHEMA_URI = 'https://schema.oparl.org/1.0'
+
+# Should HTTPS certificates be verified?
+VERIFY_HTTPS = True
 
 
 class Warning(UserWarning):
@@ -94,9 +104,8 @@ def _get_json(url):
     '''
     Download JSON from an URL and parse it.
     '''
-    # FIXME: Make HTTPS verification configurable
     log.debug('Downloading {url}'.format(url=url))
-    r = requests.get(url, verify=False)
+    r = requests.get(url, verify=VERIFY_HTTPS)
     r.raise_for_status()
     return r.json()
 
