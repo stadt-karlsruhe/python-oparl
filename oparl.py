@@ -126,7 +126,7 @@ def _is_url(value):
     return isinstance(value, six.string_types) and value.startswith('http')
 
 
-class ObjectList(collections.Sequence):
+class ExternalObjectList(collections.Sequence):
     '''
     (Lazy) list of OParl objects.
 
@@ -139,45 +139,89 @@ class ObjectList(collections.Sequence):
     further items are requested by indexing (``my_list[34]``) or by
     iterating over the list.
 
-    Note: Using ``len`` on an instance of this class returns the number
-    of already downloaded items. This number may increase once more
-    items are requested. In Oparl, the only portable way to get the
+    To prevent storing large lists completely in memory only the
+    currently requested page is stored. Random access to the list may
+    therefore lead to repeated downloads of the same page. To download
+    the complete list use ``my_list = list(my_list)``.
+
+    Using ``len`` on an instance of this class returns the currently
+    known number of items in the list. This number may increase once
+    more items are requested. In OParl, the only portable way to get the
     total number of available items is to download the complete list.
-    This can be done explicitly using the ``load`` method.
+    This can be done by using ``my_list = list(my_list)``.
+
+    Due to its dynamic nature, instances of this class only support non-
+    negative integer indices. In particular, slicing and negative
+    indices are not supported
     '''
+    # The only mandatory link between sub-pages of a paginated list in
+    # OParl is ``next``. While OParl offers several other such links
+    # (e.g. ``last``) these are optional. Similarly, OParl doesn't
+    # require the server to mention the total number of items.
+
     def __init__(self, url):
         self.url = url
-        self._next_url = url
         self._data = []
+        self._current_page_index = None
+        self._page_urls = [(0, url)]
+        self._offset = 0
+        self._len = 0
 
     def __len__(self):
-        return len(self._data)
+        return self._len
+
+    def _load_page_for_index(self, i):
+        '''
+        Loads the sub-page which contains an index.
+
+        The page which contains the index ``i`` is loaded. If ``i`` is
+        larger than the number of items in the list then an
+        ``IndexError`` is raised.
+        '''
+        j = 0
+        while True:
+            if j == len(self._page_urls) - 1:
+                if self._page_urls[j][1] is None:
+                    raise IndexError()
+                self._load_page(j)
+            if self._page_urls[j + 1][0] > i:
+                self._load_page(j)
+                return
+            j += 1
+
+    def _load_page(self, page_index):
+        '''
+        Load a sub-page.
+
+        Sub-pages must be loaded incrementally, i.e. page ``i`` must be
+        loaded before page ``i + 1``.
+        '''
+        if page_index == self._current_page_index:
+            return
+        log.debug('Getting page {index} for list {url}'.format(
+                  index=page_index, url=self.url))
+        self._offset, url = self._page_urls[page_index]
+        if url is None:
+            raise IndexError()
+        data = _get_json(url)
+        self._data = [from_json(obj) for obj in data['data']]
+        next_offset = self._offset + len(self._data)
+        self._len = max(self._len, next_offset)
+        if page_index == len(self._page_urls) - 1:
+            next_url = data['links'].get('next')
+            self._page_urls.append((next_offset, next_url))
+        self._current_page_index = page_index
 
     def __getitem__(self, i):
-        while True:
-            if i < len(self._data):
-                return self._data[i]
-            if not self._next_url:
-                raise IndexError()
-            log.debug('Getting next page for list {url}'.format(url=self.url))
-            data = _get_json(self._next_url)
-            self._data.extend(from_json(obj) for obj in data['data'])
-            self._next_url = data['links'].get('next')
-
-    def load(self):
-        '''
-        Download the complete list data.
-
-        Note that list data is automatically downloaded when it is
-        requested (via ``my_list[x]`` or by iterating over the list).
-        '''
-        try:
-            self[sys.maxint]
-        except IndexError:
-            pass
+        if not isinstance(i, int) or i < 0:
+            raise IndexError('Only non-negative integer indices are '
+                             + 'supported.')
+        self._load_page_for_index(i)
+        return self._data[i - self._offset]
 
     def __repr__(self):
-        return unidecode('<OParl ObjectList {url}>'.format(url=self.url))
+        return unidecode('<OParl ExternalObjectList {url}>'.format(
+                         url=self.url))
 
 
 class Object(dict):
@@ -213,7 +257,8 @@ class Object(dict):
     _REFERENCE_LIST_FIELDS = {}
 
     # Fields that contain an URL to a a list of OParl objects. Their
-    # values are automatically wrapped in ``ObjectList`` instances.
+    # values are automatically wrapped in ``ExternalObjectList``
+    # instances.
     _EXTERNAL_LIST_FIELDS = []
 
     def __init__(self, id):
@@ -294,7 +339,7 @@ class Object(dict):
                     values.append(lazy(v, obj_type))
             return values
         if field in self._EXTERNAL_LIST_FIELDS:
-            return ObjectList(value)
+            return ExternalObjectList(value)
         return value
 
     def _init_from_json(self, data):
