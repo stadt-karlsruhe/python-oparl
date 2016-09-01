@@ -66,13 +66,13 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import collections
+import json
 import logging
 import sys
 from warnings import warn
 
 import dateutil.parser
 import requests
-import simplejson
 import six
 from unidecode import unidecode
 
@@ -144,7 +144,7 @@ def from_json(data):
     the given data.
     '''
     if isinstance(data, six.string_types):
-        data = simplejson.loads(data)
+        data = json.loads(data)
     if not 'id' in data:
         raise ValueError('JSON data does not have an `id` field.')
     if not 'type' in data:
