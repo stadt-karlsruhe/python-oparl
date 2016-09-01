@@ -4,12 +4,18 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import collections
+import logging
+import sys
 from warnings import warn
 
 import dateutil.parser
 import requests
 import simplejson
 import six
+from unidecode import unidecode
+
+
+log = logging.getLogger(__name__)
 
 
 SCHEMA_URI = 'https://schema.oparl.org/1.0'
@@ -51,8 +57,11 @@ def _get_json(url):
     '''
     Download JSON from an URL and parse it.
     '''
-    # FIXME: Implement pagination support
-    return requests.get(url, verify=False).json()
+    # FIXME: Make HTTPS verification configurable
+    log.debug('Downloading {url}'.format(url=url))
+    r = requests.get(url, verify=False)
+    r.raise_for_status()
+    return r.json()
 
 
 def from_json(data):
@@ -68,7 +77,6 @@ def from_json(data):
     if isinstance(data, six.string_types):
         data = simplejson.loads(data)
     if not 'id' in data:
-        import pdb; pdb.set_trace()
         raise ValueError('JSON data does not have an `id` field.')
     if not 'type' in data:
         raise ValueError('JSON data does not have a `type` field.')
@@ -118,31 +126,58 @@ def _is_url(value):
     return isinstance(value, six.string_types) and value.startswith('http')
 
 
-class ObjectList(list):
+class ObjectList(collections.Sequence):
     '''
     (Lazy) list of OParl objects.
 
-    OParl collects some objects in lists which are not separate OParl
-    objects themselves (for example the value of a Body's
-    ``organization`` field). This class is a lazy wrapper around such
-    lists.
+    OParl has "external object lists". These lists contain OParl objects
+    and are accessible via URL but are not true OParl objects themselves
+    (they don't have their own fields, IDs, etc.). They exist to allow
+    a pagination of large lists.
 
-    Use the ``load`` method to download the actual data.
+    This class lazily wraps such a list. Pages are retrieved only once
+    further items are requested by indexing (``my_list[34]``) or by
+    iterating over the list.
+
+    Note: Using ``len`` on an instance of this class returns the number
+    of already downloaded items. This number may increase once more
+    items are requested. In Oparl, the only portable way to get the
+    total number of available items is to download the complete list.
+    This can be done explicitly using the ``load`` method.
     '''
     def __init__(self, url):
         self.url = url
-        self.loaded = False
+        self._next_url = url
+        self._data = []
+
+    def __len__(self):
+        return len(self._data)
+
+    def __getitem__(self, i):
+        while True:
+            if i < len(self._data):
+                return self._data[i]
+            if not self._next_url:
+                raise IndexError()
+            log.debug('Getting next page for list {url}'.format(url=self.url))
+            data = _get_json(self._next_url)
+            self._data.extend(from_json(obj) for obj in data['data'])
+            self._next_url = data['links'].get('next')
 
     def load(self):
-        self[:] = [from_json(v) for v in _get_json(self.url)]
-        self.loaded = True
+        '''
+        Download the complete list data.
+
+        Note that list data is automatically downloaded when it is
+        requested (via ``my_list[x]`` or by iterating over the list).
+        '''
+        try:
+            self[sys.maxint]
+        except IndexError:
+            pass
 
     def __repr__(self):
-        s = '<OParl ObjectList'
-        if not self.loaded:
-            s += '?'
-        s += ' {url}>'.format(url=self.url)
-        return s
+        return unidecode('<OParl ObjectList {url}>'.format(url=self.url))
 
 
 class Object(dict):
@@ -179,7 +214,7 @@ class Object(dict):
 
     # Fields that contain an URL to a a list of OParl objects. Their
     # values are automatically wrapped in ``ObjectList`` instances.
-    _REFERENCE_LIST_URL_FIELDS = []
+    _EXTERNAL_LIST_FIELDS = []
 
     def __init__(self, id):
         '''
@@ -258,7 +293,7 @@ class Object(dict):
                 else:
                     values.append(lazy(v, obj_type))
             return values
-        if field in self._REFERENCE_LIST_URL_FIELDS:
+        if field in self._EXTERNAL_LIST_FIELDS:
             return ObjectList(value)
         return value
 
@@ -294,7 +329,7 @@ class Object(dict):
         if name:
             s += ' ({name})'.format(name=name)
         s += '>'
-        return s
+        return unidecode(s)
 
 
 class AgendaItem(Object):
@@ -318,7 +353,7 @@ class Body(Object):
     _REFERENCE_LIST_FIELDS = {
         'legislativeTerm': 'https://schema.oparl.org/1.0/LegislativeTerm',
     }
-    _REFERENCE_LIST_URL_FIELDS = ['organization', 'person', 'meeting',
+    _EXTERNAL_LIST_FIELDS = ['organization', 'person', 'meeting',
                                         'paper']
 
 
@@ -393,7 +428,7 @@ class Organization(Object):
     _REFERENCE_LIST_FIELDS = {
         'membership': 'https://schema.oparl.org/1.0/Membership',
     }
-    _REFERENCE_LIST_URL_FIELDS = ['meeting']
+    _EXTERNAL_LIST_FIELDS = ['meeting']
 
 
 class Paper(Object):
@@ -427,5 +462,5 @@ class System(Object):
     _REFERENCE_LIST_FIELDS = {
         'otherOparlVersions': 'https://schema.oparl.org/1.0/System',
     }
-    _REFERENCE_LIST_URL_FIELDS = ['body']
+    _EXTERNAL_LIST_FIELDS = ['body']
 
