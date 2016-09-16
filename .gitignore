@@ -1,6 +1,7 @@
 /venv/
 /build/
 /dist/
+/.cache/
 
 *.egg-info/
 .*.swp

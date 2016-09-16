@@ -56,6 +56,17 @@ The library's logger (`log`) doesn't have a handler attached to it by default,
 but may come in handy during development.
 
 
+Development
+-----------
+First make sure that you have the necessary tools installed:
+
+    pip install -r dev-requirements.txt
+
+To run the tests, execute
+
+    pytest
+
+
 License
 -------
 Copyright (c) 2016, Stadt Karlsruhe (www.karlsruhe.de)

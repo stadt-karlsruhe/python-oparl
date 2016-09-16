@@ -130,7 +130,7 @@ def _class_from_type_uri(uri):
     import oparl.objects
     try:
         return getattr(sys.modules['oparl.objects'], parts[1])
-    except KeyError:
+    except AttributeError:
         raise ValueError('Unknown type "{name}" in type URI "{uri}".'.format(
                          name=parts[1], uri=uri))
 
