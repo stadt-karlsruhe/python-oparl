@@ -1,5 +1,5 @@
-Python OParl client library
-===========================
+# Python OParl client library
+
 This package provides tools for easily retrieving information from an
 [OParl][oparl] server. OParl is a standard interface for publishing information
 about parliaments and their work.
@@ -7,8 +7,8 @@ about parliaments and their work.
 [oparl]: https://oparl.org
 
 
-Installation
-------------
+## Installation
+
 We recommend to install the library in a [virtualenv][virtualenv]:
 
     virtualenv venv
@@ -22,8 +22,8 @@ Then:
 [virtualenv]: https://virtualenv.pypa.io/en/stable/
 
 
-Usage
------
+## Usage
+
 The main tool of the library is the `Object` class and its subclasses. They
 provide wrappers for the various OParl classes (`Body`, `Person`, ...) and
 support lazy loading and automatic conversion of OParl data types (e.g.
@@ -56,8 +56,8 @@ The library's logger (`log`) doesn't have a handler attached to it by default,
 but may come in handy during development.
 
 
-Development
------------
+## Development
+
 First make sure that you have the necessary tools installed:
 
     pip install -r dev-requirements.txt
@@ -67,9 +67,19 @@ To run the tests, execute
     pytest
 
 
-License
--------
+## License
+
 Copyright (c) 2016, Stadt Karlsruhe (www.karlsruhe.de)
 
 Distributed under the MIT license, see the file `LICENSE` for details.
+
+
+## Changelog
+
+### 0.1.1
+* Fixed a bug in the handling of unknown types
+* Made parsing more robust and warning messages more informative
+
+### 0.1.0
+* First public release
 
