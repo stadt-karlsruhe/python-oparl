@@ -2,6 +2,7 @@
 /build/
 /dist/
 /.cache/
+/.tox/
 
 *.egg-info/
 .*.swp

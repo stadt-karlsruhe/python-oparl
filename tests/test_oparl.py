@@ -77,7 +77,7 @@ def test_invalid_date_string_triggers_contentwarning():
             "startDate": "this is not a date"
         }''')
     assert len(record) == 1
-    assert 'invalid date string' in record[0].message.args[0]
+    assert 'invalid date string' in str(record[0].message)
 
 
 def test_invalid_datetime_string_triggers_contentwarning():
@@ -88,7 +88,7 @@ def test_invalid_datetime_string_triggers_contentwarning():
             "created": "this is not a date-time"
         }''')
     assert len(record) == 1
-    assert 'invalid date-time string' in record[0].message.args[0]
+    assert 'invalid date-time string' in str(record[0].message)
 
 
 def test_scalar_instead_of_list_triggers_specificationwarning():
@@ -102,7 +102,7 @@ def test_scalar_instead_of_list_triggers_specificationwarning():
             }
         }''')
     assert len(record) == 1
-    assert 'non-list value' in record[0].message.args[0]
+    assert 'non-list value' in str(record[0].message)
     membership = obj['membership']
     assert isinstance(membership, list)
     assert len(membership) == 1
@@ -117,7 +117,7 @@ def test_reference_instead_of_object_triggers_specificationwarning():
             "location": "a-location"
         }''')
     assert len(record) == 1
-    assert 'must contain an object' in record[0].message.args[0]
+    assert 'must contain an object' in str(record[0].message)
     location = obj['location']
     assert isinstance(location, oparl.objects.Location)
     assert location['id'] == 'a-location'
@@ -131,7 +131,7 @@ def test_reference_instead_of_object_in_list_triggers_specificationwarning():
             "legislativeTerm": ["a-legislativeterm"]
         }''')
     assert len(record) == 1
-    assert 'must contain objects' in record[0].message.args[0]
+    assert 'must contain objects' in str(record[0].message)
     terms = obj['legislativeTerm']
     assert isinstance(terms, list)
     assert len(terms) == 1
@@ -150,7 +150,7 @@ def test_object_instead_of_reference_triggers_specificationwarning():
             }
         }''')
     assert len(record) == 1
-    assert 'must contain an object reference' in record[0].message.args[0]
+    assert 'must contain an object reference' in str(record[0].message)
     system = obj['system']
     assert isinstance(system, oparl.objects.System)
     assert system['id'] == 'does-not-exist'
@@ -167,7 +167,7 @@ def test_object_instead_of_reference_in_list_triggers_specificationwarning():
             }]
         }''')
     assert len(record) == 1
-    assert 'must contain references' in record[0].message.args[0]
+    assert 'must contain references' in str(record[0].message)
     others = obj['otherOparlVersions']
     assert isinstance(others, list)
     assert len(others) == 1
@@ -181,7 +181,7 @@ def test_id_that_differs_from_url_triggers_contentwarning():
     with pytest.warns(oparl.ContentWarning) as record:
         obj.load()
     assert len(record) == 1
-    assert 'a different ID' in record[0].message.args[0]
+    assert 'a different ID' in str(record[0].message)
     assert obj['id'] == 'this is not my url'
 
 
@@ -192,8 +192,8 @@ def test_invalid_schema_uri_triggers_specificationwarning():
             "type": "this-is-not-the-correct-schema-uri/System"
         }''')
     assert len(record) == 2
-    assert 'Invalid schema URI' in record[0].message.args[0]
-    assert record[0].message[0] == record[1].message[0]
+    assert 'Invalid schema URI' in str(record[0].message)
+    assert str(record[0].message) == str(record[1].message)
     assert obj['type'] == 'this-is-not-the-correct-schema-uri/System'
 
 
@@ -202,7 +202,7 @@ def test_missing_id_raises_valueerror():
         oparl.from_json('''{
             "type": "https://schema.oparl.org/1.0/System"
         }''')
-    assert 'does not have an `id` field' in e.value.message
+    assert 'does not have an `id` field' in str(e.value)
 
 
 def test_missing_type_raises_valueerror():
@@ -210,7 +210,7 @@ def test_missing_type_raises_valueerror():
         oparl.from_json('''{
             "id": "does-not-exist"
         }''')
-    assert 'does not have a `type` field' in e.value.message
+    assert 'does not have a `type` field' in str(e.value)
 
 
 def test_type_mismatch_raises_valueerror():
@@ -218,7 +218,7 @@ def test_type_mismatch_raises_valueerror():
                       'https://schema.oparl.org/1.0/System')
     with pytest.raises(ValueError) as e:
         obj.load()
-    assert 'does not match instance type' in e.value.message
+    assert 'does not match instance type' in str(e.value)
 
 
 def test_invalid_type_uri_raises_valuerror():
@@ -227,7 +227,7 @@ def test_invalid_type_uri_raises_valuerror():
             "id": "does-not-exist",
             "type": "invalid"
         }''')
-    assert 'Invalid type URI' in e.value.message
+    assert 'Invalid type URI' in str(e.value)
 
 
 def test_unknown_type_raises_valueerror():
@@ -236,5 +236,5 @@ def test_unknown_type_raises_valueerror():
             "id": "does-not-exist",
             "type": "not/known"
         }''')
-    assert 'Unknown type' in e.value.message
+    assert 'Unknown type' in str(e.value)
 

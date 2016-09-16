@@ -18,6 +18,8 @@ Then:
 
     pip install -e git+https://github.com/stadt-karlsruhe/python-oparl#egg=oparl
 
+Currently, Python 2.7, 3.3, 3.4 and 3.5 are supported.
+
 
 [virtualenv]: https://virtualenv.pypa.io/en/stable/
 
@@ -64,7 +66,7 @@ First make sure that you have the necessary tools installed:
 
 To run the tests, execute
 
-    pytest
+    tox
 
 
 ## License
