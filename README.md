@@ -45,7 +45,9 @@ Instances of `Object` and its subclasses support a read-only dict-interface:
 This library tries to be as compatible with OParl 1.0 as possible but does not
 enforce strict compliance. In some cases non-compliant server behavior that has
 been seen "in the wild" is supported. These cases trigger a
-`SpecificationWarning`.
+`SpecificationWarning`. If invalid values are encountered during
+auto-conversion (e.g. illegal date strings) then a `ContentWarning` is issued
+and conversion is skipped.
 
 By default, HTTPS certificates are verified. You can disable that verification
 by setting `VERIFY_HTTPS` to `False`.

@@ -53,7 +53,9 @@ interface::
 This library tries to be as compatible with OParl 1.0 as possible but
 does not enforce strict compliance. In some cases non-compliant server
 behavior that has been seen "in the wild" is supported. These cases
-trigger a ``SpecificationWarning``.
+trigger a ``SpecificationWarning``. If invalid values are encountered
+during auto-conversion (e.g. illegal date strings) then a
+``ContentWarning`` is issued and conversion is skipped.
 
 By default, HTTPS certificates are verified. You can disable that
 verification by setting ``VERIFY_HTTPS`` to ``False``.
@@ -100,6 +102,16 @@ class Warning(UserWarning):
 class SpecificationWarning(Warning):
     '''
     Warning that something did not comply with the OParl specification.
+    '''
+    pass
+
+
+class ContentWarning(Warning):
+    '''
+    Warning that some content was malformed.
+
+    This occurs, for example, if a date string does not contain a valid
+    date.
     '''
     pass
 
@@ -174,16 +186,6 @@ def _lazy(id, type):
     '''
     cls = _class_from_type_uri(type)
     return cls(id, type)
-
-
-def _ensure_list(value, type, field):
-    if (not isinstance(value, collections.Sequence)
-            or isinstance(value, six.string_types)):
-        warn(('Field "{field}" of type "{type}" must contain a list, but a '
-             + 'non-list value was found instead.').format(field=field,
-             type=type), SpecificationWarning)
-        value = [value]
-    return value
 
 
 def _is_url(value):
@@ -387,57 +389,100 @@ class Object(collections.Mapping):
         converted accordingly. Otherwise the value is returned
         unchanged.
         '''
-        type = self._data['type']
         if field in self._DATE_FIELDS:
-            return dateutil.parser.parse(value).date()
+            return self._parse_date(value, field)
         if field in self._DATETIME_FIELDS:
-            return dateutil.parser.parse(value)
+            return self._parse_datetime(value, field)
         if field in self._OBJECT_FIELDS:
-            if _is_url(value):
-                warn(('Field "{field}" of type "{type}" must contain an '
-                     + 'object, but a URL ("{url}") was found '
-                     + 'instead.').format(field=field, type=type, url=value),
-                     SpecificationWarning)
-                return from_id(value)
-            else:
-                return from_json(value)
+            return self._parse_object(value, field)
         if field in self._OBJECT_LIST_FIELDS:
-            values = []
-            for v in _ensure_list(value, type, field):
-                if _is_url(v):
-                    warn(('The list in field "{field}" of type "{type}" must '
-                         + 'contain objects, but an URL ("{url}") was found '
-                         + 'instead.').format(field=field, type=type, url=v),
-                         SpecificationWarning)
-                    values.append(from_id(v))
-                else:
-                    values.append(from_json(v))
-            return values
+            return self._parse_object_list(value, field)
         if field in self._REFERENCE_FIELDS:
-            if isinstance(value, dict):
-                warn(('Field "{field}" of type "{type}" must contain an '
-                     + 'object reference (URL), but an object was found '
-                     + 'instead.').format(field=field, type=type),
-                     SpecificationWarning)
-                return from_json(value)
-            else:
-                return _lazy(value, self._REFERENCE_FIELDS[field])
+            return self._parse_reference(value, field)
         if field in self._REFERENCE_LIST_FIELDS:
-            obj_type = self._REFERENCE_LIST_FIELDS[field]
-            values = []
-            for v in _ensure_list(value, type, field):
-                if isinstance(v, dict):
-                    warn(('The list in field "{field}" of type "{type}" must '
-                         + 'contain references (URLs), but an object was '
-                         + 'found instead.').format(field=field, type=type),
-                         SpecificationWarning)
-                    values.append(from_json(v))
-                else:
-                    values.append(_lazy(v, obj_type))
-            return values
+            return self._parse_reference_list(value, field)
         if field in self._EXTERNAL_LIST_FIELDS:
             return ExternalObjectList(value)
         return value
+
+    def _ensure_list(self, value, field):
+        if (not isinstance(value, collections.Sequence)
+                or isinstance(value, six.string_types)):
+            warn(('In object "{id}": Field "{field}" of type "{type}" must '
+                 + 'contain a list, but a non-list value was found '
+                 + 'instead.').format(id=self._data['id'], field=field,
+                 type=self._data['type']), SpecificationWarning)
+            value = [value]
+        return value
+
+    def _parse_date(self, value, field):
+        try:
+            return dateutil.parser.parse(value).date()
+        except ValueError as e:
+            warn(('In object "{id}": Field "{field}" contains an invalid '
+                 + 'date string ("{value}"): {error}').format(
+                 id=self._data['id'], field=field, value=value, error=e),
+                 ContentWarning)
+            return value
+
+    def _parse_datetime(self, value, field):
+        try:
+            return dateutil.parser.parse(value)
+        except ValueError as e:
+            warn(('In object "{id}": Field "{field}" contains an invalid '
+                 + 'date-time string ("{value}"): {error}').format(
+                 id=self._data['id'], field=field, value=value, error=e),
+                 ContentWarning)
+            return value
+
+    def _parse_object(self, value, field):
+        if _is_url(value):
+            warn(('In object "{id}": Field "{field}" of type "{type}" '
+                 + 'must contain an object, but a URL ("{url}") was found '
+                 + 'instead.').format(id=self._data['id'], field=field,
+                 type=self._data['type'], url=value), SpecificationWarning)
+            return from_id(value)
+        else:
+            return from_json(value)
+
+    def _parse_object_list(self, value, field):
+        values = []
+        for v in self._ensure_list(value, field):
+            if _is_url(v):
+                warn(('In object "{id}": The list in field "{field}" of '
+                     + 'type "{type}" must contain objects, but an URL '
+                     + '("{url}") was found instead.').format(
+                     id=self._data['id'], field=field, type=self._data['type'],
+                     url=v), SpecificationWarning)
+                values.append(from_id(v))
+            else:
+                values.append(from_json(v))
+        return values
+
+    def _parse_reference(self, value, field):
+        if isinstance(value, dict):
+            warn(('In object "{id}": Field "{field}" of type "{type}" '
+                 + 'must contain an object reference (URL), but an object '
+                 + 'was found instead.').format(id=self._data['id'],
+                 field=field, type=self._data['type']), SpecificationWarning)
+            return from_json(value)
+        else:
+            return _lazy(value, self._REFERENCE_FIELDS[field])
+
+    def _parse_reference_list(self, value, field):
+        obj_type = self._REFERENCE_LIST_FIELDS[field]
+        values = []
+        for v in self._ensure_list(value, field):
+            if isinstance(v, dict):
+                warn(('In object "{id}": The list in field "{field}" of '
+                     + 'type "{type}" must contain references (URLs), but '
+                     + 'an object was found instead.').format(
+                     id=self._data['id'], field=field,
+                     type=self._data['type']), SpecificationWarning)
+                values.append(from_json(v))
+            else:
+                values.append(_lazy(v, obj_type))
+        return values
 
     def _init_from_json(self, data):
         '''
@@ -448,7 +493,7 @@ class Object(collections.Mapping):
         if data['id'] != self._data['id']:
             warn(('Initializing object "{id}" from JSON data which contains a '
                  + 'different ID ("{json_id}").').format(id=self._data['id'],
-                 json_id=data['id']), OParlWarning)
+                 json_id=data['id']), ContentWarning)
         try:
             type =  data['type']
         except KeyError:
